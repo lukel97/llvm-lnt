@@ -875,7 +875,7 @@ class TestSuiteTest(BuiltinTest):
                 logger.info(file + " --> " + dest)
 
     def _get_remote_path(self, path):
-      return os.path.join('/var/tmp', 'lnt.' + os.path.dirname(path))
+      return os.path.join('/var/tmp/lnt', os.path.basename(path))
 
     def diagnose(self):
         """Build a triage report that contains information about a test.
