@@ -1916,7 +1916,7 @@ def _tools_check():
               help="Additional flags to set in TARGET_FLAGS, space "
                    "separated string. These flags are appended after "
                    "*all* the individual --cflag arguments.",
-              type=click.UNPROCESSED, default='', metavar="FLAG")
+              type=click.UNPROCESSED, default=[], metavar="FLAG")
 @click.option("--mllvm", multiple=True,
               help="Add -mllvm FLAG to TARGET_FLAGS",
               type=click.UNPROCESSED, default=[], metavar="FLAG")

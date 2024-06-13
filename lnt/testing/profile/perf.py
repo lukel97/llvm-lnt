@@ -42,7 +42,7 @@ class LinuxPerfProfile(ProfileImpl):
 
     @staticmethod
     def deserialize(f, objdump='objdump', propagateExceptions=False,
-                    binaryCacheRoot=''):
+                    binaryCacheRoot='', localPath='', remotePath=''):
         f = f.name
 
         if os.path.getsize(f) == 0:
@@ -52,7 +52,7 @@ class LinuxPerfProfile(ProfileImpl):
         try:
             data = {}
             for fname in glob.glob("%s*" % f):
-                cur_data = cPerf.importPerf(fname, objdump, binaryCacheRoot)
+                cur_data = cPerf.importPerf(fname, objdump, binaryCacheRoot, localPath, remotePath)
                 merge_recursively(data, cur_data)
 
             # Go through the data and convert counter values to percentages.

@@ -12,6 +12,7 @@ import glob
 import re
 import multiprocessing
 import getpass
+from functools import partial
 
 import datetime
 from collections import defaultdict
@@ -25,7 +26,7 @@ import lnt.testing.profile
 import lnt.testing.util.compilers
 from lnt.testing.util.misc import timestamp
 from lnt.testing.util.commands import fatal
-from lnt.testing.util.commands import mkdir_p
+from lnt.testing.util.commands import capture, mkdir_p
 from lnt.testing.util.commands import resolve_command_path, isexecfile
 
 from lnt.tests.builtintest import BuiltinTest
@@ -94,7 +95,7 @@ Program;CC;CC_Time;Code_Size;CC_Hash;Exec;Exec_Time;Score
 """
 
 
-def _importProfile(name_filename):
+def _importProfile(local_path, remote_path, name_filename):
     """_importProfile imports a single profile. It must be at the top level
     (and not within TestSuiteTest) so that multiprocessing can import it
     correctly."""
@@ -104,7 +105,7 @@ def _importProfile(name_filename):
         logger.warning('Profile %s does not exist' % filename)
         return None
 
-    pf = lnt.testing.profile.profile.Profile.fromFile(filename)
+    pf = lnt.testing.profile.profile.Profile.fromFile(filename, local_path, remote_path)
     if not pf:
         return None
 
@@ -181,7 +182,6 @@ class TestSuiteTest(BuiltinTest):
         self.configured = False
         self.compiled = False
         self.trained = False
-        self.remote_run = False
 
     def run_test(self, opts):
 
@@ -339,6 +339,8 @@ class TestSuiteTest(BuiltinTest):
 
         # Write the report out so it can be read by the submission tool.
         report_path = os.path.join(self._base_path, 'report.json')
+        print('%s: generating report: %r' % (timestamp(), report_path),
+              file=sys.stderr)
         with open(report_path, 'w') as fd:
             fd.write(report.render())
 
@@ -488,6 +490,9 @@ class TestSuiteTest(BuiltinTest):
             defs['TEST_SUITE_PROFILE_GENERATE'] = "Off"
             if 'TEST_SUITE_RUN_TYPE' not in defs:
                 defs['TEST_SUITE_RUN_TYPE'] = 'ref'
+        if self.opts.remote_host:
+            defs['TEST_SUITE_REMOTE_HOST'] = self.opts.remote_host
+            defs['TEST_SUITE_REMOTE_PATH'] = self._get_remote_path(path)
 
         for item in tuple(self.opts.cmake_defines) + tuple(extra_cmake_defs):
             k, v = item.split('=', 1)
@@ -515,9 +520,6 @@ class TestSuiteTest(BuiltinTest):
         for k, v in sorted(defs.items()):
             lines.append("  %s: '%s'" % (k, v))
         lines.append('}')
-
-        if 'TEST_SUITE_REMOTE_HOST' in defs:
-            self.remote_run = True
 
         # Prepare cmake cache if requested:
         cmake_flags = []
@@ -590,7 +592,7 @@ class TestSuiteTest(BuiltinTest):
             pass
 
     def _install_benchmark(self, path):
-        if self.remote_run:
+        if self.opts.remote_host:
             cmake_cmd = self.opts.cmake
             self._check_call([cmake_cmd, '--build', '.', '-t', 'rsync'], cwd=path)
 
@@ -754,10 +756,11 @@ class TestSuiteTest(BuiltinTest):
 
             split_name = raw_name.split(' :: ', 1)
             if len(split_name) > 1:
-                name = split_name[1]
+                raw_name = split_name[1]
             else:
-                name = split_name[0]
+                raw_name = split_name[0]
 
+            name = raw_name
             if name.endswith('.test'):
                 name = name[:-5]
             name = 'nts.' + name
@@ -819,7 +822,7 @@ class TestSuiteTest(BuiltinTest):
             TIMEOUT = 800
             try:
                 pool = multiprocessing.Pool()
-                waiter = pool.map_async(_importProfile, profiles_to_import)
+                waiter = pool.map_async(partial(_importProfile, path, self._get_remote_path(path)), profiles_to_import)
                 samples = waiter.get(TIMEOUT)
                 test_samples.extend([sample
                                      for sample in samples
@@ -844,8 +847,14 @@ class TestSuiteTest(BuiltinTest):
         if self.opts.run_order:
             run_info['run_order'] = self.opts.run_order
 
-        machine_info = {
-        }
+        machine_info = {}
+        remote_args = []
+        if self.opts.remote_host:
+            remote_args = ['ssh', self.opts.remote_host]
+        machine_info['hardware'] = capture(remote_args + ['uname', '-a'],
+                                           include_stderr=True).strip()
+        machine_info['os'] = capture(remote_args + ['uname', '-sr'],
+                                     include_stderr=True).strip()
 
         machine = lnt.testing.Machine(self.opts.label, machine_info)
         run = lnt.testing.Run(self.start_time, timestamp(), info=run_info)
@@ -861,6 +870,9 @@ class TestSuiteTest(BuiltinTest):
             for file in glob.glob(src + patt):
                 shutil.copy(file, dest)
                 logger.info(file + " --> " + dest)
+
+    def _get_remote_path(self, path):
+      return os.path.join('/var/tmp', 'lnt.' + os.path.dirname(path))
 
     def diagnose(self):
         """Build a triage report that contains information about a test.
@@ -1133,6 +1145,8 @@ class TestSuiteTest(BuiltinTest):
                    " collect PGO data, then rerun with that training "
                    "data.",
               is_flag=True, default=False,)
+@click.option("--remote-host", default=None, metavar="HOST",
+              help="Set remote execution host", type=click.UNPROCESSED)
 # Output Options
 @click.option("--no-auto-name", "auto_name",
               help="Don't automatically derive submission name",

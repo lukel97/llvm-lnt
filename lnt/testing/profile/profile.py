@@ -21,7 +21,7 @@ class Profile(object):
         self.impl = impl
 
     @staticmethod
-    def fromFile(f):
+    def fromFile(f, localPath='', remotePath=''):
         """
         Load a profile from a file.
         """
@@ -32,8 +32,10 @@ class Profile(object):
                     if impl is lnt.testing.profile.perf.LinuxPerfProfile:
                         ret = impl.deserialize(
                             fd,
-                            objdump=os.getenv('CMAKE_OBJDUMP', 'objdump'),
-                            binaryCacheRoot=os.getenv('LNT_BINARY_CACHE_ROOT', ''))
+                            objdump=os.getenv('CMAKE_OBJDUMP', 'llvm-objdump'),
+                            binaryCacheRoot=os.getenv('LNT_BINARY_CACHE_ROOT', ''),
+                            localPath=localPath,
+                            remotePath=remotePath)
                     else:
                         ret = impl.deserialize(fd)
                 if ret:

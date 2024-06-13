@@ -369,16 +369,24 @@ struct Symbol {
   }
 };
 
+static std::string convertRemotePathToLocal(std::string Path, std::string LocalPath, std::string RemotePath) {
+  std::string NewPath(Path);
+  size_t StartPos = NewPath.find(RemotePath);
+  if (StartPos != std::string::npos)
+    NewPath.replace(StartPos, RemotePath.length(), LocalPath);
+  return NewPath;
+}
+
 class SymTabOutput : public std::vector<Symbol> {
 public:
-  std::string Objdump, BinaryCacheRoot;
+  std::string Objdump, BinaryCacheRoot, LocalPath, RemotePath;
 
-  SymTabOutput(std::string Objdump, std::string BinaryCacheRoot)
-    : Objdump(Objdump), BinaryCacheRoot(BinaryCacheRoot) {}
+  SymTabOutput(std::string Objdump, std::string BinaryCacheRoot, std::string LocalPath, std::string RemotePath)
+  : Objdump(Objdump), BinaryCacheRoot(BinaryCacheRoot), LocalPath(LocalPath), RemotePath(RemotePath) {}
 
   void fetchExecSegment(Map *M, uint64_t *FileOffset, uint64_t *VAddr) {
     std::string Cmd = Objdump + " -p -C " +
-                      BinaryCacheRoot + std::string(M->Filename) +
+                      BinaryCacheRoot + convertRemotePathToLocal(std::string(M->Filename), LocalPath, RemotePath) +
 #ifdef _WIN32
                       " 2> NUL";
 #else
@@ -429,9 +437,9 @@ public:
 #endif
   }
 
-  void fetchSymbols(Map *M) {
+  void fetchSymbols(Map *M) {    
     std::string Cmd = Objdump + " -t -T -C " +
-                      BinaryCacheRoot + std::string(M->Filename) +
+                      BinaryCacheRoot + convertRemotePathToLocal(std::string(M->Filename), LocalPath, RemotePath) +
 #ifdef _WIN32
                       " 2> NUL";
 #else
@@ -547,7 +555,7 @@ protected:
 
 class ObjdumpOutput {
 public:
-  std::string Objdump, BinaryCacheRoot;
+  std::string Objdump, BinaryCacheRoot, LocalPath, RemotePath;
   FILE *Stream;
   const char *ThisText;
   uint64_t ThisAddress;
@@ -555,8 +563,8 @@ public:
   char *Line;
   size_t LineLen;
 
-  ObjdumpOutput(std::string Objdump, std::string BinaryCacheRoot)
-    : Objdump(Objdump), BinaryCacheRoot(BinaryCacheRoot), Stream(nullptr),
+  ObjdumpOutput(std::string Objdump, std::string BinaryCacheRoot, std::string LocalPath, std::string RemotePath)
+  : Objdump(Objdump), BinaryCacheRoot(BinaryCacheRoot), LocalPath(LocalPath), RemotePath(RemotePath), Stream(nullptr),
       Line(NULL), LineLen(0) {}
   ~ObjdumpOutput() {
     if (Stream) {
@@ -587,10 +595,12 @@ public:
     sprintf(buf1, "%#" PRIx64, Start);
     sprintf(buf2, "%#" PRIx64, Stop + 4);
 
+    std::string LocalFilename = convertRemotePathToLocal(M->Filename, LocalPath, RemotePath);
+
     std::string Cmd = Objdump + " -d --no-show-raw-insn --start-address=" +
                       std::string(buf1) + " --stop-address=" +
                       std::string(buf2) + " " +
-                      BinaryCacheRoot + std::string(M->Filename) +
+                      BinaryCacheRoot + LocalFilename +
 #ifdef _WIN32
                       " 2> NUL";
 #else
@@ -640,7 +650,7 @@ public:
 class PerfReader {
 public:
   PerfReader(const std::string &Filename, std::string Objdump,
-             std::string BinaryCacheRoot);
+             std::string BinaryCacheRoot, std::string LocalPath, std::string RemotePath);
   ~PerfReader();
 
   void readHeader();
@@ -684,12 +694,12 @@ private:
   PyObject *Functions, *TopLevelCounters;
   std::vector<PyObject*> Lines;
   
-  std::string Objdump, BinaryCacheRoot;
+  std::string Objdump, BinaryCacheRoot, LocalPath, RemotePath;
 };
 
 PerfReader::PerfReader(const std::string &Filename, std::string Objdump,
-                       std::string BinaryCacheRoot)
-    : Objdump(Objdump), BinaryCacheRoot(BinaryCacheRoot) {
+                       std::string BinaryCacheRoot, std::string LocalPath, std::string RemotePath)
+: Objdump(Objdump), BinaryCacheRoot(BinaryCacheRoot), LocalPath(LocalPath), RemotePath(RemotePath) {
   TopLevelCounters = PyDict_New();
   Functions = PyDict_New();
 #ifdef _WIN32
@@ -1013,7 +1023,7 @@ void PerfReader::emitMaps() {
       continue;
 
     Map &M = Maps[MapID];
-    SymTabOutput Syms(Objdump, BinaryCacheRoot);
+    SymTabOutput Syms(Objdump, BinaryCacheRoot, LocalPath, RemotePath);
     Syms.reset(&M);
 
     uint64_t VAddrToPCOffset = M.VAddrToFileOffset + M.FileToPCOffset;
@@ -1061,15 +1071,14 @@ void PerfReader::emitSymbol(
     std::map<uint64_t, std::map<const char *, uint64_t>>::iterator Event,
     std::map<const char *, uint64_t> &SymEvents) {
   uint64_t VAddrToPCOffset = M.VAddrToFileOffset + M.FileToPCOffset;
-  ObjdumpOutput Dump(Objdump, BinaryCacheRoot);
+  ObjdumpOutput Dump(Objdump, BinaryCacheRoot, LocalPath, RemotePath);
   Dump.reset(&M, Sym.Start, Sym.End);
 
   emitFunctionStart(Sym.Name);
   assert(Sym.Start <= Event->first - VAddrToPCOffset &&
-         Event->first - VAddrToPCOffset < Sym.End);
+         Event->first - VAddrToPCOffset < Sym.End);  
   for (uint64_t I = Dump.next(); I < Sym.End; I = Dump.next()) {
     auto VAddr = Event->first - VAddrToPCOffset;
-
     auto Text = Dump.getText();
     if (VAddr == I) {
       emitLine(I, &Event->second, Text);
@@ -1093,11 +1102,13 @@ static PyObject *cPerf_importPerf(PyObject *self, PyObject *args) {
   const char *Fname;
   const char *Objdump = "objdump";
   const char *BinaryCacheRoot = "";
-  if (!PyArg_ParseTuple(args, "s|ss", &Fname, &Objdump, &BinaryCacheRoot))
+  const char *LocalPath = "";
+  const char *RemotePath = "";  
+  if (!PyArg_ParseTuple(args, "s|ssss", &Fname, &Objdump, &BinaryCacheRoot, &LocalPath, &RemotePath))
     return NULL;
 
   try {
-    PerfReader P(Fname, Objdump, BinaryCacheRoot);
+    PerfReader P(Fname, Objdump, BinaryCacheRoot, LocalPath, RemotePath);
     P.readHeader();
     P.readAttrs();
     P.readDataStream();
@@ -1156,7 +1167,7 @@ int main(int argc, char **argv) {
   std::string BinaryCacheRoot = getEnvVar("LNT_BINARY_CACHE_ROOT", "");
   std::string Objdump = getEnvVar("CMAKE_OBJDUMP", "objdump");
 
-  PerfReader P(argv[1], Objdump, BinaryCacheRoot);
+  PerfReader P(argv[1], Objdump, BinaryCacheRoot, "", "");
   P.readHeader();
   P.readAttrs();
   P.readDataStream();

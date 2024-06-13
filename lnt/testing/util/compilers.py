@@ -41,10 +41,6 @@ def get_cc_info(path, cc_flags=[]):
     # Determine the linker version, as found by the compiler.
     cc_ld_version = capture(([cc, "-Wl,-v", "-dynamiclib"]),
                             include_stderr=True).strip()
-    # Extract the default target .ll (or assembly, for non-LLVM compilers).
-    cc_target_assembly = capture([cc, '-S', '-flto', '-o', '-'] + cc_flags +
-                                 ['-x', 'c', '/dev/null'],
-                                 include_stderr=True).strip()
 
     # Extract the compiler's response to -dumpmachine as the target.
     cc_target = cc_dumpmachine = capture([cc, '-dumpmachine']).strip()
@@ -176,15 +172,6 @@ def get_cc_info(path, cc_flags=[]):
     if cc_build is None:
         logger.error("unable to determine compiler build: %r" % cc_version)
 
-    # If LLVM capable, fetch the llvm target instead.
-    if llvm_capable:
-        m = re.search('target triple = "(.*)"', cc_target_assembly)
-        if m:
-            cc_target, = m.groups()
-        else:
-            logger.error("unable to determine LLVM compiler target: %r: %r" %
-                         (cc, cc_target_assembly))
-
     cc_exec_hash = hashlib.sha1()
     with open(cc, 'rb') as f:
         cc_exec_hash.update(f.read())
@@ -198,8 +185,7 @@ def get_cc_info(path, cc_flags=[]):
         'cc_version': cc_version,
         'cc_exec_hash': cc_exec_hash.hexdigest(),
         'cc_as_version': cc_as_version,
-        'cc_ld_version': cc_ld_version,
-        'cc_target_assembly': cc_target_assembly,
+        'cc_ld_version': cc_ld_version
     }
     if cc1_binary is not None and os.path.exists(cc1_binary):
         cc1_exec_hash = hashlib.sha1()

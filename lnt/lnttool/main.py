@@ -415,7 +415,7 @@ def action_profile():
 def command_update(input, output):
     """upgrade a profile to the latest version"""
     import lnt.testing.profile.profile as profile
-    profile.Profile.fromFile(input).upgrade().save(filename=output)
+    profile.Profile.fromFile(input, './', '/home/luke/').upgrade().save(filename=output)
 
 
 @action_profile.command("getVersion")
