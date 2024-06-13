@@ -492,6 +492,7 @@ class TestSuiteTest(BuiltinTest):
                 defs['TEST_SUITE_RUN_TYPE'] = 'ref'
         if self.opts.remote_host:
             defs['TEST_SUITE_REMOTE_HOST'] = self.opts.remote_host
+            defs['TEST_SUITE_REMOTE_PORT'] = self.opts.remote_port
             defs['TEST_SUITE_REMOTE_PATH'] = self._get_remote_path(path)
 
         for item in tuple(self.opts.cmake_defines) + tuple(extra_cmake_defs):
@@ -851,6 +852,8 @@ class TestSuiteTest(BuiltinTest):
         remote_args = []
         if self.opts.remote_host:
             remote_args = ['ssh', self.opts.remote_host]
+            if self.opts.remote_port:
+                remote_args += ['-p', self.opts.remote_port]
         machine_info['hardware'] = capture(remote_args + ['uname', '-a'],
                                            include_stderr=True).strip()
         machine_info['os'] = capture(remote_args + ['uname', '-sr'],
@@ -1147,6 +1150,8 @@ class TestSuiteTest(BuiltinTest):
               is_flag=True, default=False,)
 @click.option("--remote-host", default=None, metavar="HOST",
               help="Set remote execution host", type=click.UNPROCESSED)
+@click.option("--remote-port", default=None, metavar="PORT",
+              help="Set remote execution port", type=click.UNPROCESSED)
 # Output Options
 @click.option("--no-auto-name", "auto_name",
               help="Don't automatically derive submission name",
