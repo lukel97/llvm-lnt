@@ -617,12 +617,12 @@ class TestSuiteTest(BuiltinTest):
 
         nr_threads = self._test_threads()
         if profile:
-            if nr_threads != 1:
-                logger.warning('Gathering profiles with perf requires -j 1 ' +
-                               'as perf record cannot be run multiple times ' +
-                               'simultaneously. Overriding -j %s to -j 1' %
-                               nr_threads)
-                nr_threads = 1
+            # if nr_threads != 1:
+            #     logger.warning('Gathering profiles with perf requires -j 1 ' +
+            #                    'as perf record cannot be run multiple times ' +
+            #                    'simultaneously. Overriding -j %s to -j 1' %
+            #                    nr_threads)
+            #     nr_threads = 1
             extra_args += ['--param', 'profile=perf']
             if self.opts.perf_events:
                 extra_args += ['--param',
