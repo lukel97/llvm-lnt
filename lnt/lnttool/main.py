@@ -412,10 +412,12 @@ def action_profile():
 @action_profile.command("upgrade")
 @click.argument("input", type=click.Path(exists=True))
 @click.argument("output", type=click.Path())
-def command_update(input, output):
+@click.option("--local-path", type=click.Path(), default=".")
+@click.option("--remote-path", type=click.Path(), default=".")
+def command_update(input, output, local_path, remote_path):
     """upgrade a profile to the latest version"""
     import lnt.testing.profile.profile as profile
-    profile.Profile.fromFile(input, './', '/home/luke/').upgrade().save(filename=output)
+    profile.Profile.fromFile(input, local_path, remote_path).upgrade().save(filename=output)
 
 
 @action_profile.command("getVersion")
