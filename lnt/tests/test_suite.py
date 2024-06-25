@@ -228,7 +228,7 @@ class TestSuiteTest(BuiltinTest):
         opts.lit = resolve_command_path(opts.lit)
         if not isexecfile(opts.lit):
             self._fatal("LIT tool not found (looked for %s)" % opts.lit)
-        if opts.run_under:
+        if opts.run_under and not opts.remote_host:
             split = shlex.split(opts.run_under)
             split[0] = resolve_command_path(split[0])
             if not isexecfile(split[0]):
@@ -492,7 +492,8 @@ class TestSuiteTest(BuiltinTest):
                 defs['TEST_SUITE_RUN_TYPE'] = 'ref'
         if self.opts.remote_host:
             defs['TEST_SUITE_REMOTE_HOST'] = self.opts.remote_host
-            defs['TEST_SUITE_REMOTE_PORT'] = self.opts.remote_port
+            if self.opts.remote_port is not None:
+                defs['TEST_SUITE_REMOTE_PORT'] = self.opts.remote_port
             defs['TEST_SUITE_REMOTE_PATH'] = self._get_remote_path(path)
 
         for item in tuple(self.opts.cmake_defines) + tuple(extra_cmake_defs):
@@ -852,7 +853,7 @@ class TestSuiteTest(BuiltinTest):
         remote_args = []
         if self.opts.remote_host:
             remote_args = ['ssh', self.opts.remote_host]
-            if self.opts.remote_port:
+            if self.opts.remote_port is not None:
                 remote_args += ['-p', self.opts.remote_port]
         machine_info['hardware'] = capture(remote_args + ['uname', '-a'],
                                            include_stderr=True).strip()
