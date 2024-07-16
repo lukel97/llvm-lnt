@@ -12,33 +12,32 @@ Installation
 The first thing to do is to checkout install the LNT software itself. The
 following steps should suffice on any modern Unix variant:
 
-#. Install ``virtualenv``, if necessary::
-
-           sudo easy_install virtualenv
-
-   ``virtualenv`` is a standard Python tool for allowing the installation of
-   Python applications into their own sandboxes, or virtual environments.
-
-#. Create a new virtual environment for the LNT application::
-
-            virtualenv ~/mysandbox
-
-   This will create a new virtual environment at ``~/mysandbox``.
-
 #. Checkout the LNT sources::
 
             git clone https://github.com/llvm/llvm-lnt.git ~/lnt
+            cd ~/lnt
+
+#. Create a virtual environment::
+
+            python -m venv venv
+            source venv/bin/activate
+
+   This will create a new virtual environment in ``venv``.  ``venv`` is a
+   standard Python module allowing the installation of Python applications into
+   their own sandboxes, or virtual environments.
 
 #. Install LNT into the virtual environment::
 
-           ~/mysandbox/bin/python ~/lnt/setup.py develop
+            pip install --editable .
 
-   We recommend using ``develop`` instead of install for local use, so that any
-   changes to the LNT sources are immediately propagated to your
-   installation. If you are running a production install or care a lot about
-   stability, you can use ``install`` which will copy in the sources and you
-   will need to explicitly re-install when you wish to update the LNT
-   application.
+   We recommend enabling `"development mode"`_ by passing ``--editable`` to pip
+   for local use, so that any changes to the LNT sources are immediately
+   propagated to your installation. If you are running a production install or
+   care a lot about stability, leaving out ``--editable`` will copy in the
+   sources and you will need to explicitly re-install when you wish to update
+   the LNT application.
+
+   .. _"development mode":  https://setuptools.pypa.io/en/latest/userguide/development_mode.html
 
 That's it!
 

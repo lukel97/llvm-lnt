@@ -457,31 +457,6 @@ def command_code_for_function(input, fn):
         list(profile.Profile.fromFile(input).getCodeForFunction(fn))))
 
 
-def _version_check():
-    """
-    Check that the installed version of the LNT is up-to-date with the running
-    package.
-
-    This check is used to force users of distribute's develop mode to reinstall
-    when the version number changes (which may involve changing package
-    requirements).
-    """
-    import pkg_resources
-    import lnt
-
-    # Get the current distribution.
-    installed_dist = pkg_resources.get_distribution("LNT")
-    if installed_dist.project_name != "LNT" or \
-       pkg_resources.parse_version(installed_dist.version) != \
-       pkg_resources.parse_version(lnt.__version__):
-        raise SystemExit("""\
-error: installed distribution %s %s is not current (%s %s), you may need to reinstall
-LNT or rerun 'setup.py develop' if using development mode.""" % (
-                         installed_dist.project_name,
-                         installed_dist.version,
-                         "LNT", lnt.__version__))
-
-
 def show_version(ctx, param, value):
     """print LNT version"""
     import lnt
@@ -501,7 +476,6 @@ def main():
 \b
 Use ``lnt <command> --help`` for more information on a specific command.
     """
-    _version_check()
 
 
 main.add_command(action_check_no_errors)
