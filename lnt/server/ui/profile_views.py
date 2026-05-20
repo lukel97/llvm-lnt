@@ -6,9 +6,47 @@ from flask import render_template, current_app
 import os
 import json
 import urllib
+import re
 from lnt.server.ui.decorators import v4_route, frontend
 from lnt.server.ui.globals import v4_url_for
 from lnt.server.ui.views import ts_data
+
+_RISCV_CONTROL_FLOW_MNEMONIC_RE = re.compile(
+    r'^(?:'
+    r'b(?:eq|ne|lt|ge|ltu|geu|eqz|nez|lez|gez|gtz|ltz)|'
+    r'beqz|bnez|blez|bgez|bgtz|bltz|'
+    r'j|jal|jr|jalr|call|tail|ret'
+    r')$'
+)
+_RISCV_SYMBOLIC_TARGET_RE = re.compile(r'0x[0-9a-fA-F]+(?=\s*<[^>]+>)')
+
+
+def _normalize_instruction_for_comparison(text):
+    normalized = ' '.join(text.split())
+    if not normalized:
+        return normalized
+
+    mnemonic = normalized.split(' ', 1)[0].lower()
+    if _RISCV_CONTROL_FLOW_MNEMONIC_RE.match(mnemonic):
+        normalized = _RISCV_SYMBOLIC_TARGET_RE.sub('0xADDR', normalized)
+    return normalized
+
+
+def _get_function_signature(profile, function_name):
+    return tuple(_normalize_instruction_for_comparison(text)
+                 for _, _, text
+                 in profile.getCodeForFunction(function_name))
+
+
+def _annotate_identical_functions(functions, profile, other_profile):
+    common_names = set(functions.keys()) & set(other_profile.getFunctions().keys())
+    other_signatures = {name: _get_function_signature(other_profile, name)
+                        for name in common_names}
+    for name, info in functions.items():
+        info['identical'] = (
+            name in other_signatures and
+            _get_function_signature(profile, name) == other_signatures[name]
+        )
 
 
 def _get_sample(session, ts, run_id, test_id):
@@ -64,6 +102,7 @@ def v4_profile_ajax_getFunctions():
     session = request.session
     ts = request.get_testsuite()
     runid = request.args.get('runid')
+    runid2 = request.args.get('runid2')
     testid = request.args.get('testid')
 
     profileDir = current_app.old_config.profileDir
@@ -72,7 +111,14 @@ def v4_profile_ajax_getFunctions():
 
     if sample and sample.profile:
         p = sample.profile.load(profileDir)
-        return json.dumps([[n, f] for n, f in p.getFunctions().items()])
+        functions = p.getFunctions()
+        if runid2 is not None:
+            sample2 = _get_sample(session, ts, runid2, testid)
+            if sample2 and sample2.profile:
+                _annotate_identical_functions(functions,
+                                              p,
+                                              sample2.profile.load(profileDir))
+        return json.dumps([[n, f] for n, f in functions.items()])
     else:
         abort(404)
 

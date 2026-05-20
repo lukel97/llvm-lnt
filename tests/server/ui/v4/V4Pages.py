@@ -22,6 +22,7 @@ from html.entities import name2codepoint
 from flask import session
 import lnt.server.db.migrate
 import lnt.server.ui.app
+import lnt.server.ui.profile_views
 import json
 
 # We can validate html if pytidylib is available and tidy-html5 is installed.
@@ -62,6 +63,15 @@ HTTP_BAD_REQUEST = 400
 HTTP_NOT_FOUND = 404
 HTTP_REDIRECT = 302
 HTTP_OK = 200
+
+
+def check_riscv_normalization():
+    lhs = "blez\ta2, 0x513a <foo+0x1bc>"
+    rhs = "blez\ta2, 0x5106 <foo+0x1bc>"
+    other = "blez\ta2, 0x5106 <bar+0x1bc>"
+    normalize = lnt.server.ui.profile_views._normalize_instruction_for_comparison
+    assert normalize(lhs) == normalize(rhs)
+    assert normalize(lhs) != normalize(other)
 
 
 def check_code(client, url, expected_code=HTTP_OK, data_to_send=None):
@@ -283,6 +293,8 @@ def extract_background_colors(sparkline_svg, nr_days):
 
 
 def main():
+    check_riscv_normalization()
+
     instance_path = sys.argv[1]
 
     # Create the application instance.
@@ -724,6 +736,11 @@ def main():
     first_function_name = functions[0][0]
     assert 1 == number_of_functions
     assert "fn1" == first_function_name
+
+    functions_with_compare = check_json(
+        client,
+        f'v4/nts/profile/ajax/getFunctions?runid={profile_run_id}&runid2={profile_run_id}&testid={foo_id}')
+    assert functions_with_compare[0][1]['identical'] is True
 
     top_level_counters = check_json(
         client,

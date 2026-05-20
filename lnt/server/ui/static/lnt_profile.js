@@ -1065,10 +1065,16 @@ function FunctionTypeahead(element, options) {
         },
         sorter: function(items) {
             // Sort items in descending order based on the value of the
-            // current counter.
+            // current counter, with identical functions moved to the end.
 
             c = options.getCounter();
             return items.sort(function(a, b) {
+                var aIdentical = !!(a[1] && a[1].identical);
+                var bIdentical = !!(b[1] && b[1].identical);
+                if (aIdentical != bIdentical) {
+                    return aIdentical - bIdentical;
+                }
+
                 // Note that this comparator needs to return -ve, 0, +ve,
                 // NOT boolean. Therefore subtracting one from the other
                 // gives the desired effect.
@@ -1132,11 +1138,15 @@ FunctionTypeahead.prototype = {
         if (this.options.updated)
             this.options.updated(name);
     },
-    changeSourceRun: function(rid, tid) {
+    changeSourceRun: function(rid, tid, compareRid) {
         var this_ = this;
+        var requestData = {'runid': rid, 'testid': tid};
+        if (compareRid) {
+            requestData['runid2'] = compareRid;
+        }
         $.ajax(g_urls.getFunctions, {
             dataType: "json",
-            data: {'runid': rid, 'testid': tid},
+            data: requestData,
             success: function(data) {
                 this_.data = data;
 
@@ -1194,7 +1204,11 @@ FunctionTypeahead.prototype = {
             return '<strong>' + match + '</strong>'
         });
     
-        return name_txt + counter_txt;
+        identical_txt = '';
+        if (fn[1].identical) {
+            identical_txt = '<span class="label pull-right">identical</span>';
+        }
+        return name_txt + counter_txt + identical_txt;
     }
 };
 
@@ -1330,20 +1344,37 @@ function pf_init(run1, run2, testid, urls) {
 
             }
         });
+
+    function pf_refresh_function_sources() {
+        var r1 = $('#run1_box').runTypeahead().getSelectedRunId();
+        var r2 = $('#run2_box').runTypeahead().getSelectedRunId();
+
+        if (r1) {
+            $('#fn1_box')
+                .functionTypeahead()
+                .changeSourceRun(r1, testid, r2);
+        }
+        if (r2) {
+            $('#fn2_box')
+                .functionTypeahead()
+                .changeSourceRun(r2, testid, r1);
+        }
+    }
     
     var r1 = $('#run1_box')
         .runTypeahead({
             searchURL: g_urls.search,
             updated: function(name, id) {
-                // Kick the functions dropdown to repopulate.
-                $('#fn1_box')
-                    .functionTypeahead()
-                    .changeSourceRun(id, testid);
+                // Kick the functions dropdowns to repopulate.
+                pf_refresh_function_sources();
                 pf_update_history();
             },
             cleared: function(name, id) {
                 $('#fn1_box').val('').prop('disabled', true);
                 $('#profile1').profile().reset();
+                if ($('#run2_box').runTypeahead().getSelectedRunId()) {
+                    pf_refresh_function_sources();
+                }
             }
         });
 
@@ -1351,15 +1382,16 @@ function pf_init(run1, run2, testid, urls) {
         .runTypeahead({
             searchURL: g_urls.search,
             updated: function(name, id) {
-                // Kick the functions dropdown to repopulate.
-                $('#fn2_box')
-                    .functionTypeahead()
-                    .changeSourceRun(id, testid);
+                // Kick the functions dropdowns to repopulate.
+                pf_refresh_function_sources();
                 pf_update_history();
             },
             cleared: function(name, id) {
                 $('#fn2_box').val('').prop('disabled', true);
                 $('#profile2').profile().reset();
+                if ($('#run1_box').runTypeahead().getSelectedRunId()) {
+                    pf_refresh_function_sources();
+                }
             }
         });
 
