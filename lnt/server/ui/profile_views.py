@@ -66,14 +66,13 @@ def _annotate_identical_functions(functions,
         name: _get_function_signature(other_profile,
                                       name,
                                       use_riscv_normalization=use_riscv_normalization)
-                        for name in common_names}
+        for name in common_names}
     for name, info in functions.items():
+        signature = _get_function_signature(profile,
+                                            name,
+                                            use_riscv_normalization=use_riscv_normalization)
         info['identical'] = (
-            name in other_signatures and
-            _get_function_signature(profile,
-                                    name,
-                                    use_riscv_normalization=use_riscv_normalization)
-            == other_signatures[name]
+            name in other_signatures and signature == other_signatures[name]
         )
 
 
