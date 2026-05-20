@@ -121,6 +121,11 @@
     overflow: scroll;
 }
 
+#profile1 tr.profile-asm-identical td,
+#profile2 tr.profile-asm-identical td {
+    color: #999;
+}
+
 .address {
     color: gray;
     font-size: small;

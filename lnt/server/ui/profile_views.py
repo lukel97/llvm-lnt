@@ -230,14 +230,16 @@ def v4_profile(testid, run1_id, run2_id=None):
         'id': run1.id,
         'order': run1.order.llvm_project_revision,
         'machine': run1.machine.name,
-        'sample': sample1.id if sample1 else None
+        'sample': sample1.id if sample1 else None,
+        'cc_target': _get_run_cc_target(run1)
     }
     if run2:
         json_run2 = {
             'id': run2.id,
             'order': run2.order.llvm_project_revision,
             'machine': run2.machine.name,
-            'sample': sample2.id if sample2 else None
+            'sample': sample2.id if sample2 else None,
+            'cc_target': _get_run_cc_target(run2)
         }
     else:
         json_run2 = {}

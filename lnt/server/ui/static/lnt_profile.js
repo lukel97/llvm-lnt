@@ -459,6 +459,113 @@ function startsWith(string, startString) {
     return string.substr(0, startString.length) === startString;
 }
 
+var g_riscv_control_flow_mnemonic_re = /^(?:b(?:eq|ne|lt|ge|ltu|geu|eqz|nez|lez|gez|gtz|ltz)|beqz|bnez|blez|bgez|bgtz|bltz|j|jal|jr|jalr|call|tail|ret)$/;
+var g_riscv_symbolic_target_re = /0x[0-9a-fA-F]+(?=\s*<[^>]+>)/g;
+
+function pf_is_riscv_target(target) {
+    return !!target && target.toLowerCase().indexOf('riscv') != -1;
+}
+
+function pf_should_use_riscv_normalization() {
+    return pf_is_riscv_target(g_run1.cc_target) || pf_is_riscv_target(g_run2.cc_target);
+}
+
+function pf_normalize_instruction_for_comparison(text, use_riscv_normalization) {
+    var normalized = text.split(/\s+/).join(' ').replace(/^\s+|\s+$/g, '');
+    if (!normalized)
+        return normalized;
+
+    var split = normalized.split(' ', 1);
+    var mnemonic = split[0].toLowerCase();
+    if (use_riscv_normalization && g_riscv_control_flow_mnemonic_re.test(mnemonic))
+        normalized = normalized.replace(g_riscv_symbolic_target_re, '0xADDR');
+    return normalized;
+}
+
+function pf_compute_lcs_matches(lhs, rhs) {
+    var lhs_len = lhs.length;
+    var rhs_len = rhs.length;
+    var lengths = [];
+    for (var i = 0; i <= lhs_len; ++i) {
+        var row = [];
+        for (var j = 0; j <= rhs_len; ++j)
+            row.push(0);
+        lengths.push(row);
+    }
+
+    for (var i = lhs_len - 1; i >= 0; --i) {
+        for (var j = rhs_len - 1; j >= 0; --j) {
+            if (lhs[i] == rhs[j])
+                lengths[i][j] = lengths[i + 1][j + 1] + 1;
+            else
+                lengths[i][j] = Math.max(lengths[i + 1][j], lengths[i][j + 1]);
+        }
+    }
+
+    var lhs_matches = [];
+    var rhs_matches = [];
+    for (var i = 0; i < lhs_len; ++i)
+        lhs_matches.push(false);
+    for (var j = 0; j < rhs_len; ++j)
+        rhs_matches.push(false);
+
+    var i = 0;
+    var j = 0;
+    while (i < lhs_len && j < rhs_len) {
+        if (lhs[i] == rhs[j]) {
+            lhs_matches[i] = true;
+            rhs_matches[j] = true;
+            i += 1;
+            j += 1;
+        } else if (lengths[i + 1][j] >= lengths[i][j + 1]) {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    return [lhs_matches, rhs_matches];
+}
+
+function pf_mark_all_lines_changed(profile_name) {
+    $('#' + profile_name + ' tr.asm-line-row')
+        .removeClass('profile-asm-identical')
+        .addClass('profile-asm-changed');
+}
+
+function pf_update_straightline_comparison() {
+    var profile1 = $('#profile1').profile();
+    var profile2 = $('#profile2').profile();
+    if (!profile1 || !profile2)
+        return;
+
+    if (!profile1.data || !profile2.data || profile1.displayType != 'straight'
+        || profile2.displayType != 'straight' || profile1.function_name != profile2.function_name) {
+        pf_mark_all_lines_changed('profile1');
+        pf_mark_all_lines_changed('profile2');
+        return;
+    }
+
+    var use_riscv_normalization = pf_should_use_riscv_normalization();
+    var p1 = [];
+    var p2 = [];
+    for (var i = 0; i < profile1.data.length; ++i)
+        p1.push(pf_normalize_instruction_for_comparison(profile1.data[i][2], use_riscv_normalization));
+    for (var j = 0; j < profile2.data.length; ++j)
+        p2.push(pf_normalize_instruction_for_comparison(profile2.data[j][2], use_riscv_normalization));
+
+    var matches = pf_compute_lcs_matches(p1, p2);
+    $('#profile1 tr.asm-line-row').each(function(idx, obj) {
+        $(obj)
+            .toggleClass('profile-asm-identical', !!matches[0][idx])
+            .toggleClass('profile-asm-changed', !matches[0][idx]);
+    });
+    $('#profile2 tr.asm-line-row').each(function(idx, obj) {
+        $(obj)
+            .toggleClass('profile-asm-identical', !!matches[1][idx])
+            .toggleClass('profile-asm-changed', !matches[1][idx]);
+    });
+}
+
 Profile.prototype = {
     reset: function() {
         $(this.element).empty();
@@ -661,7 +768,7 @@ Profile.prototype = {
         for (var i=0; i<this.data.length; ++i) {
             line = this.data[i];
 
-            row = $('<tr></tr>');
+            row = $('<tr></tr>').addClass('asm-line-row');
 
             counter = this.counter_name;
             if (counter in line[0] && line[0][counter] > 0.0)
@@ -676,6 +783,7 @@ Profile.prototype = {
             row.append($('<td></td>').text(line[2]));
             this.element.append(row);
         }
+        pf_update_straightline_comparison();
     },
 
     _label: function(value, littleSpace) {
@@ -981,6 +1089,12 @@ function ToolBar(element) {
     element.find('.prev-btn-l').click(function() {
       this_._findNextInstruction(this_, true);
     });
+    element.find('.next-btn-c').click(function() {
+      this_._findNextChangedLine(this_, false);
+    });
+    element.find('.prev-btn-c').click(function() {
+      this_._findNextChangedLine(this_, true);
+    });
 }
 
 ToolBar.prototype = {
@@ -1041,6 +1155,48 @@ ToolBar.prototype = {
         }, 500);
         
         $(obj).effect("highlight", {}, 1500);        
+    },
+
+    _findNextChangedLineInProfile: function(this_, profile_elem_name, isPrev) {
+        var windowTop = $(window).scrollTop();
+        var offset = this_.marginTop + this.element.innerHeight();
+        var y = windowTop + offset;
+        var rows = $('#' + profile_elem_name + ' tr.profile-asm-changed');
+        var ret = null;
+        rows.each(function(idx, obj) {
+            var objY = $(obj).position().top;
+            if (!isPrev && objY > y) {
+                ret = obj;
+                return false;
+            }
+            if (isPrev && objY < y)
+                ret = obj;
+        });
+        return ret;
+    },
+
+    _findNextChangedLine: function(this_, isPrev) {
+        var offset = this_.marginTop + this.element.innerHeight();
+        var ret1 = this_._findNextChangedLineInProfile(this_, 'profile1', isPrev);
+        var ret2 = this_._findNextChangedLineInProfile(this_, 'profile2', isPrev);
+        var obj = ret1;
+        if (ret1 && ret2) {
+            if (!isPrev && $(ret2).position().top < $(ret1).position().top)
+                obj = ret2;
+            if (isPrev && $(ret2).position().top > $(ret1).position().top)
+                obj = ret2;
+        } else if (!ret1) {
+            obj = ret2;
+        }
+
+        if (!obj)
+            return;
+
+        $('html, body').animate({
+            scrollTop: $(obj).position().top - offset
+        }, 500);
+
+        $(obj).effect("highlight", {}, 1500);
     },
 
     triggerResize: function() {
