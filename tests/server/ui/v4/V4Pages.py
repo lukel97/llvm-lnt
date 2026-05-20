@@ -70,8 +70,13 @@ def check_riscv_normalization():
     rhs = "blez\ta2, 0x5106 <foo+0x1bc>"
     other = "blez\ta2, 0x5106 <bar+0x1bc>"
     normalize = lnt.server.ui.profile_views._normalize_instruction_for_comparison
-    assert normalize(lhs) == normalize(rhs)
-    assert normalize(lhs) != normalize(other)
+    assert normalize(lhs) != normalize(rhs)
+    assert normalize(lhs, use_riscv_normalization=True) == \
+        normalize(rhs, use_riscv_normalization=True)
+    assert normalize(lhs, use_riscv_normalization=True) != \
+        normalize(other, use_riscv_normalization=True)
+    assert lnt.server.ui.profile_views._is_riscv_target("riscv64-unknown-linux-gnu")
+    assert not lnt.server.ui.profile_views._is_riscv_target("x86_64-apple-darwin11.0.0")
 
 
 def check_code(client, url, expected_code=HTTP_OK, data_to_send=None):

@@ -1203,10 +1203,14 @@ FunctionTypeahead.prototype = {
         name_txt = name.replace(new RegExp('(' + q + ')', 'ig'), function ($1, match) {
             return '<strong>' + match + '</strong>'
         });
-    
+
+        if (fn[1].identical) {
+            name_txt = '<span class="profile-fn-similar">' + name_txt + '</span>';
+        }
+
         identical_txt = '';
         if (fn[1].identical) {
-            identical_txt = '<span class="label pull-right">identical</span>';
+            identical_txt = '<span class="label pull-right profile-fn-similar-label">similar</span>';
         }
         return name_txt + counter_txt + identical_txt;
     }

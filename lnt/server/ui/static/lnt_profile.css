@@ -55,6 +55,16 @@
     text-align: left;
 }
 
+.profile-fn-similar {
+    color: #888;
+}
+
+.profile-fn-similar-label {
+    font-size: 10px;
+    line-height: 12px;
+    background-color: #888;
+}
+
 /***********************************************************************/
 /* All rows (runs, stats and function) */
 
@@ -161,4 +171,3 @@
     stroke: #D35400;
     fill: none;
 }
-

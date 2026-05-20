@@ -21,31 +21,59 @@ _RISCV_CONTROL_FLOW_MNEMONIC_RE = re.compile(
 _RISCV_SYMBOLIC_TARGET_RE = re.compile(r'0x[0-9a-fA-F]+(?=\s*<[^>]+>)')
 
 
-def _normalize_instruction_for_comparison(text):
+def _is_riscv_target(target):
+    return bool(target) and 'riscv' in target.lower()
+
+
+def _get_run_cc_target(run):
+    try:
+        return run.parameters.get('cc_target')
+    except Exception:
+        return None
+
+
+def _should_use_riscv_normalization(run, other_run):
+    return any(_is_riscv_target(target)
+               for target
+               in [_get_run_cc_target(run), _get_run_cc_target(other_run)])
+
+
+def _normalize_instruction_for_comparison(text, use_riscv_normalization=False):
     normalized = ' '.join(text.split())
     if not normalized:
         return normalized
 
     mnemonic = normalized.split(' ', 1)[0].lower()
-    if _RISCV_CONTROL_FLOW_MNEMONIC_RE.match(mnemonic):
+    if use_riscv_normalization and _RISCV_CONTROL_FLOW_MNEMONIC_RE.match(mnemonic):
         normalized = _RISCV_SYMBOLIC_TARGET_RE.sub('0xADDR', normalized)
     return normalized
 
 
-def _get_function_signature(profile, function_name):
-    return tuple(_normalize_instruction_for_comparison(text)
+def _get_function_signature(profile, function_name, use_riscv_normalization=False):
+    return tuple(_normalize_instruction_for_comparison(
+                     text,
+                     use_riscv_normalization=use_riscv_normalization)
                  for _, _, text
                  in profile.getCodeForFunction(function_name))
 
 
-def _annotate_identical_functions(functions, profile, other_profile):
+def _annotate_identical_functions(functions,
+                                  profile,
+                                  other_profile,
+                                  use_riscv_normalization=False):
     common_names = set(functions.keys()) & set(other_profile.getFunctions().keys())
-    other_signatures = {name: _get_function_signature(other_profile, name)
+    other_signatures = {
+        name: _get_function_signature(other_profile,
+                                      name,
+                                      use_riscv_normalization=use_riscv_normalization)
                         for name in common_names}
     for name, info in functions.items():
         info['identical'] = (
             name in other_signatures and
-            _get_function_signature(profile, name) == other_signatures[name]
+            _get_function_signature(profile,
+                                    name,
+                                    use_riscv_normalization=use_riscv_normalization)
+            == other_signatures[name]
         )
 
 
@@ -115,9 +143,13 @@ def v4_profile_ajax_getFunctions():
         if runid2 is not None:
             sample2 = _get_sample(session, ts, runid2, testid)
             if sample2 and sample2.profile:
+                run = session.query(ts.Run).filter(ts.Run.id == runid).first()
+                run2 = session.query(ts.Run).filter(ts.Run.id == runid2).first()
                 _annotate_identical_functions(functions,
                                               p,
-                                              sample2.profile.load(profileDir))
+                                              sample2.profile.load(profileDir),
+                                              use_riscv_normalization=(
+                                                  _should_use_riscv_normalization(run, run2)))
         return json.dumps([[n, f] for n, f in functions.items()])
     else:
         abort(404)
